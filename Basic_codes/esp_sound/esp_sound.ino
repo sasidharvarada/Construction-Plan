@@ -1,9 +1,8 @@
-//esp8266
-// #define SoundSensorPin A0  // ESP8266 uses A0 for analog input
-// #define VREF  3.3  // Voltage reference for ESP8266 (operating voltage)
+// #define SoundSensorPin A0  // ESP8266 uses A0 for analog input //esp8266
+#define SoundSensorPin 36  // GPIO pin for sound sensor   // esp32
+#define VREF  3.3  // Voltage reference for ESP8266 (operating voltage)
 
-#define SoundSensorPin 36  // GPIO pin for sound sensor
-#define VREF 5.0           // Reference voltage for sound sensor
+
 float voltageValue, dbValue;
 
 void setup() {
