@@ -180,4 +180,4 @@ byte command_frame[9] = {0xAA, 0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x67, 0xBB}; 
 byte received_data[9];                    // Data received from PM sensor
 int sum = 0;                              // Checksum variable
 
-float aqi = 0.0;
+float aqiValue = 0; // Global variable to store the AQI value
