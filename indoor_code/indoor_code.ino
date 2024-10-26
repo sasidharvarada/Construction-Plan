@@ -185,6 +185,44 @@ void sound_loop() {
   ThingSpeak.setField(8, dbValue);
 }
 
+float calculate_AQI(float pm2_cal, float pm10_cal, int ppm) {
+    // Calculate PM2.5 sub-index
+    float pm25_subIndex;
+    if (pm2_cal <= 30) pm25_subIndex = pm2_cal * 50 / 30;
+    else if (pm2_cal <= 60) pm25_subIndex = 50 + (pm2_cal - 30) * 50 / 30;
+    else if (pm2_cal <= 90) pm25_subIndex = 100 + (pm2_cal - 60) * 100 / 30;
+    else if (pm2_cal <= 120) pm25_subIndex = 200 + (pm2_cal - 90) * 100 / 30;
+    else if (pm2_cal <= 250) pm25_subIndex = 300 + (pm2_cal - 120) * 100 / 130;
+    else pm25_subIndex = 400 + (pm2_cal - 250) * 100 / 130;
+
+    // Calculate PM10 sub-index
+    float pm10_subIndex;
+    if (pm10_cal <= 50) pm10_subIndex = pm10_cal;
+    else if (pm10_cal <= 100) pm10_subIndex = pm10_cal;
+    else if (pm10_cal <= 250) pm10_subIndex = 100 + (pm10_cal - 100) * 100 / 150;
+    else if (pm10_cal <= 350) pm10_subIndex = 200 + (pm10_cal - 250);
+    else if (pm10_cal <= 430) pm10_subIndex = 300 + (pm10_cal - 350) * 100 / 80;
+    else pm10_subIndex = 400 + (pm10_cal - 430) * 100 / 80;
+
+    // Calculate CO2 sub-index
+    float co2_subIndex;
+    if (ppm <= 400) co2_subIndex = ppm * 50 / 400;                     // Safe level
+    else if (ppm <= 1000) co2_subIndex = 50 + (ppm - 400) * 50 / 600;  // Moderate level
+    else if (ppm <= 2000) co2_subIndex = 100 + (ppm - 1000) * 100 / 1000; // Unhealthy for sensitive groups
+    else if (ppm <= 5000) co2_subIndex = 200 + (ppm - 2000) * 100 / 3000; // Unhealthy
+    else co2_subIndex = 300 + (ppm - 5000) * 100 / 5000;               // Very unhealthy/hazardous
+
+    // Determine AQI as the maximum of the three sub-indices
+    float maxIndex = pm25_subIndex;
+    if (pm10_subIndex > maxIndex) maxIndex = pm10_subIndex;
+    if (co2_subIndex > maxIndex) maxIndex = co2_subIndex;
+    
+    Serial.println("AQI value is "+ String(maxIndex));
+    return maxIndex; // Return the highest sub-index as the AQI
+
+    
+}
+
 void postToThingSpeak() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Connected ");
@@ -203,7 +241,7 @@ void postToOneM2M() {
     return;
   }
 
-  String data = "[" + String(ntp_epoch_time) + " , " + String(pm2) + " , " + String(pm2_cal) + " , " + String(pm10) + " , " + String(pm10_cal) + " , " + String(t) + " , " + String(h) + " , " + String(ppm) + " , " + String(dbValue) +" , " + String(dbValue_cal) +" , " + String(aqi)+"]";
+  String data = "[" + String(ntp_epoch_time) + " , " + String(pm2) + " , " + String(pm2_cal) + " , " + String(pm10) + " , " + String(pm10_cal) + " , " + String(t) + " , " + String(h) + " , " + String(ppm) + " , " + String(dbValue) +" , " + String(dbValue_cal) +" , " + String(aqiValue)+"]";
 
   String server = "http://" + String(CSE_IP) + ":" + String(CSE_PORT) + String(OM2M_MN);
 
@@ -258,6 +296,7 @@ void loop() {
   PM_Reading();       // Read PM2.5 and PM10 levels
   CO2_Monitor();      // Read CO2 concentration
   sound_loop();       // Read sound levels
+  aqiValue = calculate_AQI(pm2_cal, pm10_cal, ppm);
   //post the data
   postToThingSpeak();
   postToOneM2M();
