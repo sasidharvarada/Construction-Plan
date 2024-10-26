@@ -1,41 +1,33 @@
-#include <SoftwareSerial.h>
+#include <SDS011.h>
 
-// Pin definitions for SDS011
-#define SDS011_RX_PIN 16
-#define SDS011_TX_PIN 17
+float pm2_5 ,pm10;
+int err;
 
-SoftwareSerial sds011Serial(SDS011_RX_PIN, SDS011_TX_PIN);  // RX, TX
+// Initialize the SDS011 object
+SDS011 my_sds;
 
-// Buffer for reading data
-uint8_t data[10];
+// Define the serial port for ESP32
+#ifdef ESP32
+HardwareSerial port(2);  // Use Serial2 on the ESP32
+#endif
 
 void setup() {
-  Serial.begin(115200);
-  sds011Serial.begin(9600);  // SDS011 uses 9600 baud rate
-  Serial.println("SDS011 ESP32 Interface");
+    Serial.begin(115200);       // Start the main serial monitor
+    port.begin(9600, SERIAL_8N1, 16, 17);  // SDS011 uses 9600 baud; RX=16, TX=17
+    my_sds.begin(&port);        // Initialize SDS011 with the specified port
+    delay(2000);                // Allow some time for the sensor to initialize
+
+    Serial.println("SDS011 Sensor Initialized.");
 }
 
 void loop() {
-  if (sds011Serial.available() >= 10) {
-    // Read 10 bytes of data
-    for (int i = 0; i < 10; i++) {
-      data[i] = sds011Serial.read();
+    // Read PM2.5 and PM10 values from SDS011
+    err = my_sds.read(&p25, &p10);
+    if (!err) {
+        Serial.println("PM2.5: " + String(pm2_5) + " µg/m³");
+        Serial.println("PM10:  " + String(pm10) + " µg/m³");
+    } else {
+        Serial.println("Failed to read from SDS011 sensor!");
     }
-
-    // Check for start characters and valid packet
-  if (data[0] == 0xAA && data[1] == 0xC0 && data[9] == 0xAB) {
-      // Extract PM2.5 and PM10 values
-      int pm25 = (data[2] | (data[3] << 8)) / 10.0;  // PM2.5
-      int pm10 = (data[4] | (data[5] << 8)) / 10.0;  // PM10
-      // Print the values to the Serial Monitor
-      Serial.print("PM2.5: ");
-      Serial.print(pm25);
-      Serial.print(" µg/m³, ");
-      Serial.print("PM10: ");
-      Serial.print(pm10);
-      Serial.println(" µg/m³");
-    }
-  }
-
-  delay(1000);  // Read data every second
+    delay(1000);  // Wait 1 second between readings
 }
