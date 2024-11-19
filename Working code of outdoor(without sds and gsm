@@ -1,0 +1,136 @@
+#include <Wire.h>
+#include <RTClib.h>
+#include <SD.h>
+#include <SPI.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_AHT10.h>
+
+// RTC setup
+RTC_DS3231 rtc;
+
+// Noise sensor setup
+#define SOUND_SENSOR_PIN 36
+#define VREF 3.3             // Reference voltage of ESP32
+#define BASE_VOLTAGE 0.4     // Silence base voltage (adjust based on your sensor datasheet)
+#define SCALE_FACTOR 50.0    // Sensitivity of the sensor in dB/V
+
+// SD card setup
+#define SD_CS_PIN 5 // Chip select pin for SD card module
+
+// AHT10 sensor setup
+Adafruit_AHT10 aht;
+
+// File to log data
+File dataFile;
+
+void setup() {
+  Serial.begin(115200);
+
+  // Initialize I2C for RTC
+  Wire.begin(21, 22);  // SDA = GPIO 21, SCL = GPIO 22
+
+  // Initialize RTC
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC. Please check connections!");
+    while (1); // Halt if RTC initialization fails
+  }
+
+  // Check if the RTC lost power
+  if (rtc.lostPower()) {
+    Serial.println("RTC lost power, setting the time to compile time.");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Set RTC to compile time
+  }
+
+  // Initialize AHT10 sensor
+  if (!aht.begin()) {
+    Serial.println("Couldn't find AHT10 sensor. Please check connections!");
+    while (1); // Halt if AHT10 initialization fails
+  }
+  
+  // Initialize SD card
+  if (!SD.begin(SD_CS_PIN)) {
+    Serial.println("SD card initialization failed!");
+    Serial.println("Possible causes: incorrect wiring, wrong CS pin, or SD card not formatted.");
+    while (1); // Halt if SD initialization fails
+  }
+
+  Serial.println("SD card initialized successfully!");
+
+  // Create folder if it doesn't exist
+  if (!SD.exists("data.txt")) {
+    SD.mkdir("data.txt"); // Create the folder if it doesn't exist
+    Serial.println("Folder 'data.txt' created!");
+  }
+
+  // Open the CSV file inside the 'data.txt' folder for writing (appending mode)
+  dataFile = SD.open("/data.txt/data_log.csv", FILE_WRITE);
+  if (dataFile) {
+    // Write header only if the file is empty
+    if (dataFile.size() == 0) {
+      dataFile.println("Timestamp,Noise Level (dB),Temperature (C),Humidity (%)"); // Write header to the file
+      Serial.println("CSV header written.");
+    }
+    dataFile.close();
+  } else {
+    Serial.println("Error opening file for writing!");
+  }
+
+  Serial.println("RTC, Noise Sensor, AHT10, and SD card setup completed!");
+}
+
+void loop() {
+  // Step 1: Read current time from RTC
+  DateTime now = rtc.now();
+  String timestamp = String(now.year()) + "-" +
+                     String(now.month()) + "-" +
+                     String(now.day()) + " " +
+                     String(now.hour()) + ":" +
+                     String(now.minute()) + ":" +
+                     String(now.second());
+
+  // Step 2: Read noise sensor data
+  int rawValue = analogRead(SOUND_SENSOR_PIN);
+  float voltage = rawValue * (VREF / 4095.0);
+  float decibels = (voltage - BASE_VOLTAGE) * SCALE_FACTOR;
+
+  // Handle negative decibel values (noise level below sensor's threshold)
+  if (decibels < 0) {
+    decibels = 0;
+  }
+
+  // Step 3: Read temperature and humidity from AHT10
+  sensors_event_t tempEvent, humidityEvent;
+  aht.getEvent(&humidityEvent, &tempEvent);
+
+  float temperature = tempEvent.temperature; // in Celsius
+  float humidity = humidityEvent.relative_humidity; // in percentage
+
+  // Print timestamp, noise level, temperature, and humidity to Serial Monitor
+  Serial.print("Timestamp: ");
+  Serial.print(timestamp);
+  Serial.print(" | Noise Level: ");
+  Serial.print(decibels, 2); // Print decibel value with 2 decimal places
+  Serial.print(" dB | Temp: ");
+  Serial.print(temperature, 2); // Print temperature with 2 decimal places
+  Serial.print(" C | Humidity: ");
+  Serial.print(humidity, 2); // Print humidity with 2 decimal places
+  Serial.println(" %");
+
+  // Step 4: Log data to SD card (append to the existing file)
+  dataFile = SD.open("/data.txt/data_log.csv", FILE_APPEND); // Open file in append mode
+  if (dataFile) {
+    dataFile.print(timestamp);
+    dataFile.print(",");
+    dataFile.print(decibels, 2); // Write decibel value with 2 decimal places
+    dataFile.print(",");
+    dataFile.print(temperature, 2); // Write temperature value with 2 decimal places
+    dataFile.print(",");
+    dataFile.println(humidity, 2); // Write humidity value with 2 decimal places
+    dataFile.close();
+    Serial.println("Data logged to SD card.");
+  } else {
+    Serial.println("Error writing to file!");
+  }
+
+  delay(1000); // Update every second
+}
